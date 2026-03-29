@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:context=".ui.settings.SettingsFragment">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- CONNECTION GROUP -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Connection"
+        android:textStyle="bold"
+        android:textSize="16sp"
+        android:paddingBottom="8dp" />
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/endpointLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="https://demo.webitel.com">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/endpointInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textUri" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tokenLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:hint="App Token">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/tokenInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- USER GROUP -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="User"
+        android:textStyle="bold"
+        android:textSize="16sp"
+        android:layout_marginTop="24dp"
+        android:paddingBottom="8dp" />
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/userIdLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="User ID">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/userIdInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/issLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:hint="Issuer (iss)">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/issInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textUri" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/nameLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:hint="Name">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/nameInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textPersonName" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- ACTIONS -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/connectButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Connect" />
+    </LinearLayout>
+
+</LinearLayout>
+</ScrollView>
