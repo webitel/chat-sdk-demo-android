@@ -63,10 +63,10 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
 
     private var currentUser = ContactIdentity(
         "qwer-qwer-wqre",
-        "https://ddfs/portal",
+        "https://demo.webitel.com/portal",
         "John Doe"
     )
-    private var currentHost: String = ""
+    private var currentHost: String = "https://demo.webitel.com"
 
     private var chatClient: ChatClient? = null
     private var jwtGenerator: JwtGenerator? = null
