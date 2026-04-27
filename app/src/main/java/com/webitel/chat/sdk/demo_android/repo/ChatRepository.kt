@@ -168,8 +168,8 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
 
         page.items.forEach { dialog ->
             if (dialog.type == DialogType.DIRECT) {
-                dialog.members.firstOrNull { it.id.sub != currentUser.sub }?.let {
-                    dialogsByContact[it.id.sub] = dialog
+                dialog.members.firstOrNull { it.contact.id.sub != currentUser.sub }?.let {
+                    dialogsByContact[it.contact.id.sub] = dialog
                 }
             }
         }
@@ -551,8 +551,8 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
                 }
 
                 if (event.dialog.type == DialogType.DIRECT) {
-                    event.dialog.members.firstOrNull { it.id.sub != currentUser.sub }?.let {
-                        dialogsByContact[it.id.sub] = event.dialog
+                    event.dialog.members.firstOrNull { it.contact.id.sub != currentUser.sub }?.let {
+                        dialogsByContact[it.contact.id.sub] = event.dialog
                     }
                 }
             }

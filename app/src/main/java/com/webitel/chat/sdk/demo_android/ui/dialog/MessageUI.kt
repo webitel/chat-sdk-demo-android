@@ -16,10 +16,10 @@ data class MessageUI(
         get() { return message?.text ?: body }
 
     val senderName: String
-        get() { return message?.from?.name ?: "Me" }
+        get() { return message?.from?.contact?.name ?: "Me" }
 
     val senderId: String
-        get() { return message?.from?.id?.sub ?: "Me" }
+        get() { return message?.from?.contact?.id?.sub ?: "Me" }
 
 
     val isSent: Boolean

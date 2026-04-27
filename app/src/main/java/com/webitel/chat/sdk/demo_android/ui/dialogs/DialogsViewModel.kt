@@ -3,7 +3,9 @@ package com.webitel.chat.sdk.demo_android.ui.dialogs
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.webitel.chat.sdk.ConnectionState
+import com.webitel.chat.sdk.DialogFilter
 import com.webitel.chat.sdk.DialogRequest
+import com.webitel.chat.sdk.DialogType
 import com.webitel.chat.sdk.demo_android.repo.ChatRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -32,7 +34,16 @@ class DialogsViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 if (onConnectedHandled()) {
-                    ChatRepository.shared.loadDialogs(DialogRequest(size = 50))
+                    ChatRepository.shared.loadDialogs(
+                        DialogRequest(
+                            size = 50,
+                            filter = DialogFilter(
+                                types = listOf(
+                                    DialogType.DIRECT
+                                )
+                            )
+                        )
+                    )
                 }
             } catch (e: Exception) {
                 _events.emit(e.message.toString())

@@ -53,7 +53,7 @@ dependencies {
 
     implementation(libs.java.jwt)
 
-    implementation("com.github.webitel:chat-sdk-android:0.1.1")
+    implementation("com.github.webitel:chat-sdk-android:0.2.1")
 
     implementation(platform("com.google.firebase:firebase-bom:34.10.0"))
     implementation("com.google.firebase:firebase-messaging")

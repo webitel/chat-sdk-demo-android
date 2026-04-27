@@ -114,7 +114,7 @@ class DialogViewModel : ViewModel() {
             ChatRepository.shared.dialogs.collect { dialogs ->
                 if (dialogId != null) return@collect
                 val dialog = dialogs.firstOrNull { d ->
-                    d.dialog.members.any { it.id.sub == contactId && d.dialog.type == DialogType.DIRECT }
+                    d.dialog.members.any { it.contact.id.sub == contactId && d.dialog.type == DialogType.DIRECT }
                 } ?: return@collect
 
                 dialogId = dialog.id
