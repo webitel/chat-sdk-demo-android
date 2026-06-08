@@ -18,6 +18,15 @@
         android:layout_height="wrap_content"
         android:padding="8dp">
 
+        <ImageButton
+            android:id="@+id/btnAttach"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginBottom="10dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_attach"
+            android:contentDescription="Attach file"/>
+
         <EditText
             android:id="@+id/etMessage"
             android:layout_width="0dp"

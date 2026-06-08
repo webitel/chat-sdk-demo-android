@@ -11,8 +11,11 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:background="@drawable/background_mine_message"
+        android:clipToOutline="true"
         android:orientation="vertical"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintHorizontal_bias="1.0"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintWidth_max="wrap"
         app:layout_constraintWidth_percent="0.80">
@@ -41,6 +44,12 @@
             android:paddingEnd="8dp"
             android:paddingBottom="6dp"
             android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/attachmentContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
 
         <LinearLayout
             android:layout_width="wrap_content"

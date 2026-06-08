@@ -24,6 +24,7 @@ import com.webitel.chat.sdk.ContactIdentity
 import com.webitel.chat.sdk.demo_android.databinding.ActivityMainBinding
 import com.webitel.chat.sdk.demo_android.repo.AuthRepository
 import com.webitel.chat.sdk.demo_android.repo.ChatRepository
+import com.webitel.chat.sdk.demo_android.repo.FileCache
 import kotlinx.coroutines.launch
 
 
@@ -31,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var navController: NavController
+    private lateinit var navView: BottomNavigationView
 
     private lateinit var connectivityManager: ConnectivityManager
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
@@ -46,12 +48,13 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        FileCache.init(applicationContext)
         setupChatClient()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val navView: BottomNavigationView = binding.navView
+        navView = binding.navView
         setSupportActionBar(binding.topToolbar)
 
         navController = findNavController(R.id.nav_host_fragment_activity_main)
@@ -76,12 +79,19 @@ class MainActivity : AppCompatActivity() {
                 ChatRepository.shared.connectionState.collect {
                     updateConnectionLouder(it)
                     setConnectStateUI(it)
+                    setTabsEnabled(AuthRepository(this@MainActivity).getAuthInfo() != null)
                 }
             }
         }
 
         setupActionBarWithNavController(navController, appBarConfiguration)
         navView.setupWithNavController(navController)
+
+        val hasAuth = AuthRepository(this).getAuthInfo() != null
+        setTabsEnabled(hasAuth)
+        if (!hasAuth) {
+            navView.selectedItemId = R.id.navigation_settings
+        }
 
         connectivityManager =
             getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -159,6 +169,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+
+
+    private fun setTabsEnabled(enabled: Boolean) {
+        navView.menu.findItem(R.id.navigation_dialogs).isEnabled = enabled
+        navView.menu.findItem(R.id.navigation_contacts).isEnabled = enabled
+    }
 
 
     private fun setupChatClient() {

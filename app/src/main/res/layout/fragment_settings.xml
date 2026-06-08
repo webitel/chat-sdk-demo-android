@@ -112,5 +112,14 @@
             android:text="Connect" />
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/versionText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="1.0.0"
+        android:layout_gravity="end"
+        android:textSize="14sp"
+        android:layout_marginTop="24dp"
+        android:paddingBottom="8dp" />
 </LinearLayout>
 </ScrollView>

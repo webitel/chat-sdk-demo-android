@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
@@ -40,27 +41,23 @@ class SettingsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.connectButton.setOnClickListener {
-            viewLifecycleOwner.lifecycleScope.launch {
-                repeatOnLifecycle(Lifecycle.State.STARTED) {
-                    val host = binding.endpointInput.text.toString()
-                    val token = binding.tokenInput.text.toString()
-                    val usrId = binding.userIdInput.text.toString()
-                    val iss = binding.issInput.text.toString()
-                    val name = binding.nameInput.text.toString()
+        binding.versionText.text = com.webitel.chat.sdk.BuildConfig.VERSION_NAME
 
-                    if (host.isEmpty() || token.isEmpty() || usrId.isEmpty()
-                        || iss.isEmpty() || name.isEmpty()
-                    ) {
-                        Toast.makeText(context, "all must be filled", Toast.LENGTH_LONG)
-                            .show()
-                    } else {
-                        val auth = AuthInfo(host, token, usrId, iss, name)
-                        settingsViewModel.save(requireActivity().application, auth)
-                    }
-                }
+        binding.connectButton.setOnClickListener {
+            val host = binding.endpointInput.validateNotBlank("Endpoint required")
+            val token = binding.tokenInput.validateNotBlank("Token required")
+            val usrId = binding.userIdInput.validateNotBlank("User ID required")
+            val iss = binding.issInput.validateNotBlank("Issuer required")
+            val name = binding.nameInput.validateNotBlank("Name required")
+
+            if (host == null || token == null || usrId == null || iss == null || name == null) {
+                return@setOnClickListener
             }
+
+            val auth = AuthInfo(host, token, usrId, iss, name)
+            settingsViewModel.save(auth)
         }
+
         observeAuthInfo()
         observeEvents()
         observeProgress()
@@ -112,4 +109,10 @@ class SettingsFragment : Fragment() {
             }
         }
     }
+}
+
+private fun EditText.validateNotBlank(errorMessage: String): String? {
+    val text = this.text.toString().trim()
+    this.error = if (text.isEmpty()) errorMessage else null
+    return text.takeIf { it.isNotEmpty() }
 }

@@ -4,7 +4,9 @@ import android.app.Application
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessaging
 import com.webitel.chat.sdk.AuthMethod
+import com.webitel.chat.sdk.Cancellable
 import com.webitel.chat.sdk.ChatClient
+import com.webitel.chat.sdk.ChatError
 import com.webitel.chat.sdk.ChatEvent
 import com.webitel.chat.sdk.ChatEventListener
 import com.webitel.chat.sdk.ConnectionListener
@@ -16,16 +18,31 @@ import com.webitel.chat.sdk.Dialog
 import com.webitel.chat.sdk.DialogEvent
 import com.webitel.chat.sdk.DialogRequest
 import com.webitel.chat.sdk.DialogType
+import com.webitel.chat.sdk.DownloadListener
+import com.webitel.chat.sdk.DownloadRequest
+import com.webitel.chat.sdk.DownloadResult
 import com.webitel.chat.sdk.HistoryCursor
 import com.webitel.chat.sdk.HistoryRequest
 import com.webitel.chat.sdk.LogLevel
+import com.webitel.chat.sdk.Message
+import com.webitel.chat.sdk.MessageAction
+import com.webitel.chat.sdk.MessageAttachment
+import com.webitel.chat.sdk.MessageContent
 import com.webitel.chat.sdk.MessageEvent
 import com.webitel.chat.sdk.MessageOptions
 import com.webitel.chat.sdk.MessageTarget
 import com.webitel.chat.sdk.MoveDirection
 import com.webitel.chat.sdk.Page
+import com.webitel.chat.sdk.SendAttachment
+import com.webitel.chat.sdk.SendContent
 import com.webitel.chat.sdk.StateEvent
+import com.webitel.chat.sdk.UploadListener
+import com.webitel.chat.sdk.UploadRequest
+import com.webitel.chat.sdk.UploadResult
+import com.webitel.chat.sdk.demo_android.ui.dialog.FileState
 import com.webitel.chat.sdk.demo_android.ui.dialog.MessageUI
+import com.webitel.chat.sdk.demo_android.ui.dialog.PendingAttachment
+import com.webitel.chat.sdk.demo_android.ui.dialog.previewText
 import com.webitel.chat.sdk.demo_android.ui.dialogs.DialogUI
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +56,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
@@ -55,11 +73,12 @@ import kotlin.coroutines.resumeWithException
  * - exposing data via StateFlow
  * - optimistic UI updates for messages
  * - simple in-memory caching
+ * - file download with progress and SharedPreferences caching
  * - FCM registration
  *
  * Simplified for demo purposes.
  */
-class ChatRepository private constructor(): ChatEventListener, ConnectionListener {
+class ChatRepository private constructor() : ChatEventListener, ConnectionListener {
 
     private var currentUser = ContactIdentity(
         "qwer-qwer-wqre",
@@ -73,7 +92,7 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
 
     private val useJWT: Boolean = true
 
-    private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Connecting)
+    private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState: StateFlow<ConnectionState> = _connectionState
     private val repoScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -83,7 +102,7 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
         _dialogs
             .map { map ->
                 map.values
-                    .sortedByDescending { it.lastMessageAt}
+                    .sortedByDescending { it.lastMessageAt }
             }
             .stateIn(repoScope, SharingStarted.Eagerly, emptyList())
 
@@ -151,6 +170,27 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
     }
 
 
+    suspend fun sendAction(
+        messageId: String,
+        buttonId: String,
+        data: String
+    ) = suspendCancellableCoroutine { continuation ->
+        requireChatClient.sendAction(
+            messageId,
+            MessageAction.ButtonClick(id = buttonId, data = data)
+        ) { result ->
+            result.fold(
+                onSuccess = {
+                    continuation.resume(Unit)
+                },
+                onFailure = {
+                    continuation.resumeWithException(it)
+                }
+            )
+        }
+    }
+
+
     fun openConnect() {
         requireChatClient.connect()
     }
@@ -181,7 +221,7 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
                     val dialogUI = DialogUI(
                         dialog = it,
                         lastMessageAt = it.lastMessage?.createdAt ?: 0,
-                        lastMessageText = it.lastMessage?.text ?: ""
+                        lastMessageText = it.lastMessage?.previewText ?: ""
                     )
                     put(it.id, dialogUI)
                 }
@@ -200,6 +240,169 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
     }
 
 
+    /**
+     * Downloads a file attachment and saves it to the app's files directory.
+     *
+     * Demonstrates:
+     * - checking SharedPreferences cache before hitting the network
+     * - streaming chunks to disk
+     * - updating FileState in the message list via StateFlow
+     * - returning Cancellable for user-initiated cancellation
+     */
+    fun downloadFile(
+        dialogId: String,
+        messageLocalId: String,
+        fileId: String,
+        fileName: String,
+        filesDir: File,
+        fileSize: Long = 0L
+    ): Cancellable {
+        val cached = FileCache.shared.get(fileId)
+        if (cached != null && File(cached).exists()) {
+            updateFileState(dialogId, messageLocalId, fileId, FileState.Downloaded(cached))
+            return object : Cancellable { override fun cancel() {} }
+        }
+
+        updateFileState(dialogId, messageLocalId, fileId, FileState.Downloading(null))
+
+        val destFile = File(filesDir, "${fileId}_${fileName}")
+        val out = destFile.outputStream().buffered()
+        var bytesReceived = 0L
+
+        return requireChatClient.download(DownloadRequest(fileId, 0L), object : DownloadListener {
+            override fun onChunk(chunk: ByteArray) {
+                out.write(chunk)
+                bytesReceived += chunk.size
+                val progress = if (fileSize > 0) {
+                    ((bytesReceived * 100) / fileSize).toInt().coerceIn(0, 100)
+                } else null
+                updateFileState(dialogId, messageLocalId, fileId, FileState.Downloading(progress))
+            }
+
+            override fun onCompleted(result: DownloadResult) {
+                out.flush()
+                out.close()
+                FileCache.shared.put(fileId, destFile.absolutePath)
+                updateFileState(dialogId, messageLocalId, fileId, FileState.Downloaded(destFile.absolutePath))
+            }
+
+            override fun onError(error: ChatError) {
+                out.close()
+                destFile.delete()
+                updateFileState(dialogId, messageLocalId, fileId,
+                    FileState.Error(error.message ?: "Download failed"))
+            }
+        })
+    }
+
+
+    /**
+     * Uploads a file and sends it as a chat message attachment.
+     *
+     * Demonstrates the upload → send flow:
+     * 1. Show an optimistic local placeholder message (spinner while sending)
+     * 2. Upload the file via the SDK
+     * 3. On upload success, send the message with the SDK-assigned file ID
+     * 4. On server echo (MessageEvent.Received), the placeholder is replaced
+     *    with the actual message content including attachment metadata
+     *
+     *
+     * Example for multiple files:
+     *
+     *  val fileIds = uploads.awaitAll()
+     *  chatClient.sendMessage(
+     *     target,
+     *     MessageOptions(
+     *         SendContent.Attachments(
+     *             fileIds.map { SendAttachment.File(it) }
+     *         )
+     *     )
+     * )
+     */
+    suspend fun sendFileMessage(
+        target: MessageTarget,
+        request: UploadRequest,
+        localFilePath: String,
+        text: String = ""
+    ): String = withContext(Dispatchers.IO) {
+        suspendCancellableCoroutine { cont ->
+            val sendId = UUID.randomUUID().toString()
+            val tempFileId = sendId
+
+            val localMessage = MessageUI(
+                localId = sendId,
+                content = MessageContent.Text(text.ifBlank { request.fileName }),
+                createdAt = System.currentTimeMillis(),
+                senderName = "Me",
+                isOutgoing = true,
+                pendingAttachment = PendingAttachment(
+                    tempId = tempFileId,
+                    fileName = request.fileName,
+                    mimeType = request.mimeType.toString(),
+                    localPath = localFilePath
+                ),
+                fileStates = mapOf(tempFileId to FileState.Uploading(null))
+            )
+
+            val key = when (target) {
+                is MessageTarget.Dialog -> target.id
+                is MessageTarget.Contact -> target.contactId.sub
+            }
+            val cache = when (target) {
+                is MessageTarget.Dialog -> messagesCache
+                is MessageTarget.Contact -> temporaryMessagesCache
+            }
+
+            cache[key]?.update { it + localMessage }
+
+            requireChatClient.upload(request, object : UploadListener {
+                override fun onCreated(uploadId: String) {}
+
+                override fun onProgress(uploaded: Long, total: Long?) {
+                    val progress = if (total != null && total > 0) {
+                        ((uploaded * 100) / total).toInt()
+                    } else null
+                    updateFileState(key, sendId, tempFileId, FileState.Uploading(progress), cache)
+                }
+
+                override fun onCompleted(result: UploadResult) {
+                    val fileId = result.file.id
+                    // Cache the local copy so this file appears as Downloaded
+                    // on the sender's side after the server echo arrives.
+                    FileCache.shared.put(fileId, localFilePath)
+                    updateFileState(key, sendId, tempFileId, FileState.Downloaded(localFilePath), cache)
+
+                    val sendContent = if (text.isBlank()) {
+                        SendContent.Attachments(listOf(SendAttachment.File(fileId)))
+                    } else {
+                        SendContent.Composite(text, listOf(SendAttachment.File(fileId)))
+                    }
+                    requireChatClient.sendMessage(
+                        target,
+                        MessageOptions(sendContent, sendId)
+                    ) { sendResult ->
+                        sendResult
+                            .onSuccess { messageId ->
+                                updateMessageSent(cache, key, sendId, messageId)
+                                cont.resume(messageId)
+                            }
+                            .onFailure { throwable ->
+                                updateMessageError(cache, key, sendId, throwable)
+                                cont.resumeWithException(throwable)
+                            }
+                    }
+                }
+
+                override fun onError(error: ChatError) {
+                    val throwable = Exception(error.message ?: "Upload failed")
+                    updateMessageError(cache, key, sendId, throwable)
+                    cont.resumeWithException(throwable)
+                }
+            })
+        }
+    }
+
+
     suspend fun sendTextMessage(
         target: MessageTarget,
         text: String
@@ -209,7 +412,10 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
             val sendId = UUID.randomUUID().toString()
             val localMessage = MessageUI(
                 localId = sendId,
-                body = text,
+                content = MessageContent.Text(text),
+                createdAt = System.currentTimeMillis(),
+                senderName = "Me",
+                isOutgoing = true
             )
 
             val key = when (target) {
@@ -226,9 +432,18 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
 
             cache[key]?.update { it + localMessage }
 
-            requireChatClient.sendMessage(target, MessageOptions(text, sendId = sendId)) { result ->
+            requireChatClient.sendMessage(
+                target,
+                MessageOptions(SendContent.Text(text), sendId)
+            ) { result ->
                 result
                     .onSuccess { messageId ->
+                        updateMessageSent(
+                            cache = cache,
+                            key = key,
+                            localId = sendId,
+                            messageId = messageId
+                        )
                         cont.resume(messageId)
                     }
                     .onFailure { throwable ->
@@ -255,11 +470,11 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
 
             val flow = messagesCache.getOrPut(id) { MutableStateFlow(emptyList()) }
 
-            val lastMessage = flow.value.lastOrNull()?.message
+            val lastMessageId = flow.value.lastOrNull()?.messageId
 
-            val cursor = lastMessage?.let {
+            val cursor = lastMessageId?.let {
                 HistoryCursor(
-                    messageId = it.id,
+                    messageId = it,
                     direction = MoveDirection.NEWER
                 )
             }
@@ -269,14 +484,13 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
             dialogUI.dialog.getHistory(request) { result ->
                 result
                     .onSuccess { slice ->
-
                         if (slice.items.isNotEmpty()) {
                             flow.update { current ->
-                                val existingIds = current.mapNotNull { it.message?.id }.toSet()
+                                val existingIds = current.mapNotNull { it.messageId }.toSet()
 
                                 val newMessages = slice.items
                                     .filter { it.id !in existingIds }
-                                    .map { MessageUI(localId = it.id, message = it) }
+                                    .map { it.toUI() }
 
                                 current + newMessages
                             }
@@ -417,10 +631,8 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
         requireChatClient.registerDevice(token) { result ->
             result
                 .onSuccess { Log.d(TAG, "Device registered") }
-                .onFailure { Log.e(TAG, it.message.toString())}
+                .onFailure { Log.e(TAG, it.message.toString()) }
         }
-
-
 
 
     private suspend fun endSession() =
@@ -435,6 +647,42 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
         }
 
 
+    private fun updateFileState(
+        key: String,
+        messageLocalId: String,
+        fileId: String,
+        state: FileState,
+        cache: MutableMap<String, MutableStateFlow<List<MessageUI>>> = messagesCache
+    ) {
+        val flow = cache[key] ?: return
+        flow.update { list ->
+            list.map { msg ->
+                if (msg.localId == messageLocalId)
+                    msg.copy(fileStates = msg.fileStates + (fileId to state))
+                else msg
+            }
+        }
+    }
+
+
+    private fun updateMessageSent(
+        cache: MutableMap<String, MutableStateFlow<List<MessageUI>>>,
+        key: String,
+        localId: String,
+        messageId: String
+    ) {
+        val flow = cache[key] ?: return
+
+        flow.update { list ->
+            list.map { msg ->
+                if (msg.localId == localId) {
+                    msg.copy(messageId = messageId)
+                } else msg
+            }
+        }
+    }
+
+
     private fun updateMessageError(
         cache: MutableMap<String, MutableStateFlow<List<MessageUI>>>,
         key: String,
@@ -446,9 +694,7 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
         flow.update { list ->
             list.map { msg ->
                 if (msg.localId == localId) {
-                    msg.copy(
-                        error = throwable.message
-                    )
+                    msg.copy(error = throwable.message)
                 } else msg
             }
         }
@@ -497,7 +743,7 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
 
 
     override fun onEvent(event: ChatEvent) {
-        when(event) {
+        when (event) {
             is MessageEvent.Received -> {
                 val dialogId = event.dialogId
                 val message = event.message
@@ -505,34 +751,25 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
 
                 val flow = messagesCache[dialogId]
                 flow?.update { list ->
-
                     if (sendId != null) {
-
                         val index = list.indexOfFirst { it.localId == sendId }
-
                         if (index != -1) {
+                            // Replace the local placeholder with the full server message
+                            // so that file attachments and content are properly populated.
                             return@update list.toMutableList().apply {
-                                this[index] = this[index].copy(
-                                    message = message,
-                                    error = null
-                                )
+                                this[index] = message.toUI()
                             }
                         }
                     }
-                    list + MessageUI(
-                        localId = message.id,
-                        message = message
-                    )
+                    list + message.toUI()
                 }
                 _dialogs.update {
                     val currentUI = it[dialogId] ?: return@update it
-
                     val updatedUI = DialogUI(
                         dialog = currentUI.dialog,
                         lastMessageAt = currentUI.dialog.lastMessage?.createdAt ?: System.currentTimeMillis(),
-                        lastMessageText = currentUI.dialog.lastMessage?.text ?: ""
+                        lastMessageText = currentUI.dialog.lastMessage?.previewText ?: ""
                     )
-
                     it + (dialogId to updatedUI)
                 }
             }
@@ -545,7 +782,7 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
                     val dialogUI = DialogUI(
                         event.dialog,
                         lastMessageAt = event.dialog.lastMessage?.createdAt ?: 0,
-                        lastMessageText = event.dialog.lastMessage?.text ?: ""
+                        lastMessageText = event.dialog.lastMessage?.previewText ?: ""
                     )
                     map + (event.dialog.id to dialogUI)
                 }
@@ -565,4 +802,37 @@ class ChatRepository private constructor(): ChatEventListener, ConnectionListene
             _connectionState.emit(state)
         }
     }
+}
+
+
+/**
+ * Converts a SDK [Message] to a [MessageUI], pre-populating [MessageUI.fileStates]
+ * from [FileCache] so previously downloaded attachments appear as [FileState.Downloaded]
+ * immediately — no re-download needed after an app restart.
+ */
+fun Message.toUI(): MessageUI {
+    val attachments: List<MessageAttachment> = when (val c = content) {
+        is MessageContent.Attachments -> c.attachments
+        is MessageContent.Composite -> c.attachments
+        else -> emptyList()
+    }
+
+    val fileStates = attachments.associate { attachment ->
+        val cachedPath = FileCache.shared.get(attachment.fileId)
+        attachment.fileId to if (cachedPath != null && File(cachedPath).exists()) {
+            FileState.Downloaded(cachedPath)
+        } else {
+            FileState.Idle
+        }
+    }
+
+    return MessageUI(
+        localId = sendId ?: id,
+        content = content,
+        createdAt = createdAt,
+        senderName = from.contact.name,
+        isOutgoing = isOutgoing,
+        messageId = id,
+        fileStates = fileStates
+    )
 }

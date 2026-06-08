@@ -47,6 +47,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="7dp"
         android:background="@drawable/background_theirs_message"
+        android:clipToOutline="true"
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toEndOf="@+id/avatarCard"
@@ -78,6 +79,12 @@
             android:paddingEnd="8dp"
             android:paddingBottom="6dp"
             android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/attachmentContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
 
         <TextView
             android:id="@+id/time"
