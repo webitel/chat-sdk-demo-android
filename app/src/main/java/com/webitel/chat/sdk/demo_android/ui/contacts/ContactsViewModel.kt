@@ -10,16 +10,17 @@ import kotlinx.coroutines.launch
 
 
 class ContactsViewModel : ViewModel() {
-    val contacts = ChatRepository.shared.contacts
+    val contacts = ChatRepository.shared.contacts.items
+
     private val _events = MutableSharedFlow<String>()
     val events: SharedFlow<String> = _events
 
     fun load() {
         viewModelScope.launch {
             try {
-                ChatRepository.shared.loadContacts(ContactRequest(size = 50))
+                ChatRepository.shared.contacts.loadContacts(ContactRequest(size = 500))
             } catch (e: Exception) {
-                _events.emit(e.message.toString())
+                _events.emit(e.message.orEmpty())
             }
         }
     }

@@ -1,19 +1,109 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Messages list -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvMessages"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"/>
+        android:layout_weight="1">
+
+        <!-- Messages list -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvMessages"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Shown when the newest messages are not loaded (after a jump): opens them -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabLatest"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="12dp"
+            android:contentDescription="Jump to latest"
+            android:src="@android:drawable/arrow_down_float"
+            android:visibility="gone"
+            app:fabSize="mini" />
+    </FrameLayout>
+
+    <!-- "X is typing…" -->
+    <TextView
+        android:id="@+id/tvTyping"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="16dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="16dp"
+        android:textSize="13sp"
+        android:textStyle="italic"
+        android:visibility="gone" />
+
+    <!-- "Replying to X" above the input, with a button to cancel -->
+    <LinearLayout
+        android:id="@+id/replyBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="8dp"
+        android:visibility="gone">
+
+        <View
+            android:layout_width="3dp"
+            android:layout_height="match_parent"
+            android:background="?attr/colorPrimary" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:paddingStart="8dp">
+
+            <TextView
+                android:id="@+id/tvReplyTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:textColor="?attr/colorPrimary"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvReplyText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btnCancelReply"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Cancel reply"
+            android:src="@android:drawable/ic_menu_close_clear_cancel" />
+    </LinearLayout>
+
+    <!-- Shown instead of the input when the current user has left the dialog -->
+    <TextView
+        android:id="@+id/tvNotMember"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:padding="16dp"
+        android:text="You are no longer a member of this dialog"
+        android:visibility="gone" />
 
     <!-- Input -->
     <LinearLayout
+        android:id="@+id/inputBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:padding="8dp">

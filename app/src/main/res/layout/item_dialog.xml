@@ -39,9 +39,26 @@
         android:maxLines="1"
         android:ellipsize="end"
         app:layout_constraintStart_toEndOf="@id/avatarCard"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/unreadBadge"
         app:layout_constraintTop_toTopOf="@id/avatarCard"
         android:layout_marginStart="12dp"/>
+
+    <!-- Unread messages count -->
+    <TextView
+        android:id="@+id/unreadBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="24dp"
+        android:background="@drawable/bg_unread_badge"
+        android:gravity="center"
+        android:minWidth="24dp"
+        android:paddingHorizontal="6dp"
+        android:textColor="@android:color/white"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/avatarCard" />
 
     <!-- Top message -->
     <TextView
@@ -53,7 +70,7 @@
         android:ellipsize="end"
         android:layout_marginTop="4dp"
         app:layout_constraintStart_toStartOf="@id/titleText"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/unreadBadge"
         app:layout_constraintTop_toBottomOf="@id/titleText"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

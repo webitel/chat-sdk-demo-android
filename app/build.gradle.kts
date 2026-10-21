@@ -5,6 +5,8 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+val chatSdk = "com.github.webitel:chat-sdk-android:1.1.2"
+
 android {
     namespace = "com.webitel.chat.sdk.demo_android"
     compileSdk = 36
@@ -13,8 +15,11 @@ android {
         applicationId = "com.webitel.chat.sdk.demo_android"
         minSdk = 26
         targetSdk = 36
+        // Demo app version, shown on the Settings screen together with the SDK version.
         versionCode = 1
         versionName = "1.0"
+
+        buildConfigField("String", "SDK_VERSION", "\"${chatSdk.substringAfterLast(':')}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -37,6 +42,7 @@ android {
     }
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 
@@ -53,7 +59,7 @@ dependencies {
 
     implementation(libs.java.jwt)
 
-    implementation("com.github.webitel:chat-sdk-android:0.4.2")
+    implementation(chatSdk)
     implementation("com.github.bumptech.glide:glide:4.16.0")
 
     implementation(platform("com.google.firebase:firebase-bom:34.10.0"))

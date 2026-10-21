@@ -1,8 +1,9 @@
 package com.webitel.chat.sdk.demo_android.ui.dialog
 
-import android.annotation.SuppressLint
 import android.content.DialogInterface
+import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.Typeface
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -21,6 +22,9 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
+import com.google.android.material.color.MaterialColors
 import com.webitel.chat.sdk.ChatButtonAction
 import com.webitel.chat.sdk.ChatKeyboard
 import com.webitel.chat.sdk.MessageAttachment
@@ -28,6 +32,7 @@ import com.webitel.chat.sdk.MessageContent
 import com.webitel.chat.sdk.demo_android.R
 import com.webitel.chat.sdk.demo_android.ui.common.colorFromId
 import com.webitel.chat.sdk.demo_android.ui.common.formatTime
+import com.webitel.chat.sdk.demo_android.ui.common.initials
 import com.webitel.chat.sdk.demo_android.ui.common.isColorDark
 import java.io.File
 
@@ -35,44 +40,49 @@ import java.io.File
 class MessagesAdapter(
     private val onDownloadClick: (messageLocalId: String, fileId: String, fileName: String, fileSize: Long) -> Unit,
     private val onFileOpen: (localPath: String, mimeType: String) -> Unit,
-    private val onButtonClick: (messageId: String?, buttonId: String, action: ChatButtonAction) -> Unit
-) : ListAdapter<MessageUI, RecyclerView.ViewHolder>(Diff) {
+    private val onButtonClick: (messageId: String?, buttonId: String, action: ChatButtonAction) -> Unit,
+    private val onReactionClick: (message: MessageUI, emoji: String) -> Unit,
+    private val onMessageLongClick: (message: MessageUI) -> Unit,
+    private val onLocationClick: (MessageContent.Location) -> Unit,
+    private val onContactClick: (MessageContent.Contact) -> Unit
+) : ListAdapter<MessageUI, MessagesAdapter.BaseVH>(Diff) {
 
     companion object {
         private const val TYPE_MINE = 1
         private const val TYPE_THEIRS = 2
+        private const val TYPE_SYSTEM = 3
+        private val READ_COLOR = Color.parseColor("#17AAF0")
     }
 
-    override fun getItemViewType(position: Int): Int =
-        if (getItem(position).isOutgoing) TYPE_MINE else TYPE_THEIRS
+    override fun getItemViewType(position: Int): Int {
+        val message = getItem(position)
+        return when {
+            // System events (deleted ones too) are a centered line, not a bubble
+            message.content is MessageContent.System && !message.isDeleted -> TYPE_SYSTEM
+            message.isOutgoing -> TYPE_MINE
+            else -> TYPE_THEIRS
+        }
+    }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): BaseVH {
         val inflater = LayoutInflater.from(parent.context)
-        return if (viewType == TYPE_MINE) {
-            MineVH(inflater.inflate(R.layout.item_message_mine, parent, false))
-        } else {
-            TheirsVH(inflater.inflate(R.layout.item_message_theirs, parent, false))
+        return when (viewType) {
+            TYPE_SYSTEM -> SystemVH(inflater.inflate(R.layout.item_message_system, parent, false))
+            TYPE_MINE -> MineVH(inflater.inflate(R.layout.item_message_mine, parent, false))
+            else -> TheirsVH(inflater.inflate(R.layout.item_message_theirs, parent, false))
         }
     }
 
-    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        val msg = getItem(position)
-        when (holder) {
-            is MineVH -> holder.bind(msg)
-            is TheirsVH -> holder.bind(msg)
-        }
+    override fun onBindViewHolder(holder: BaseVH, position: Int) {
+        holder.bind(getItem(position))
     }
 
+    /** Payload = only download/upload progress changed: update numbers without re-binding. */
     @Suppress("UNCHECKED_CAST")
-    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int, payloads: MutableList<Any>) {
-        if (payloads.isEmpty()) { super.onBindViewHolder(holder, position, payloads); return }
-        val fileStates = payloads.filterIsInstance<Map<String, FileState>>().lastOrNull()
-            ?: run { super.onBindViewHolder(holder, position, payloads); return }
-        val msg = getItem(position)
-        when (holder) {
-            is MineVH -> holder.updateProgress(msg, fileStates)
-            is TheirsVH -> holder.updateProgress(msg, fileStates)
-        }
+    override fun onBindViewHolder(holder: BaseVH, position: Int, payloads: MutableList<Any>) {
+        val fileStates = payloads.lastOrNull() as? Map<String, FileState>
+        if (fileStates != null && holder is MessageVH) holder.updateProgress(fileStates)
+        else holder.bind(getItem(position))
     }
 
     // ─── Image grid ──────────────────────────────────────────────────────────
@@ -129,13 +139,13 @@ class MessagesAdapter(
                 data.localPreviewPath?.let { Glide.with(cell.context).load(File(it)).into(imageView) }
                     ?: Glide.with(cell.context).clear(imageView)
                 progressOverlay.isVisible = true
-                tvProgress.text = if (state.progress != null) "${state.progress}%" else "…"
+                tvProgress.text = progressText(state.progress)
                 cell.setOnClickListener(null)
             }
             is FileState.Downloading -> {
                 Glide.with(cell.context).clear(imageView)
                 progressOverlay.isVisible = true
-                tvProgress.text = if (state.progress != null) "${state.progress}%" else "…"
+                tvProgress.text = progressText(state.progress)
             }
             is FileState.Idle -> {
                 Glide.with(cell.context).clear(imageView)
@@ -183,29 +193,10 @@ class MessagesAdapter(
                     onDownloadClick(msg.localId, attachment.fileId, attachment.fileName, attachment.size)
                 }
             }
-            is FileState.Downloading -> {
+            is FileState.Downloading, is FileState.Uploading -> {
                 btnDownload.isGone = true
                 progressContainer.isVisible = true
-                downloadProgress.isIndeterminate = state.progress == null
-                if (state.progress != null) {
-                    downloadProgress.progress = state.progress
-                    tvProgressPercent.isVisible = true
-                    tvProgressPercent.text = "${state.progress}%"
-                } else {
-                    tvProgressPercent.isGone = true
-                }
-            }
-            is FileState.Uploading -> {
-                btnDownload.isGone = true
-                progressContainer.isVisible = true
-                downloadProgress.isIndeterminate = state.progress == null
-                if (state.progress != null) {
-                    downloadProgress.progress = state.progress
-                    tvProgressPercent.isVisible = true
-                    tvProgressPercent.text = "${state.progress}%"
-                } else {
-                    tvProgressPercent.isGone = true
-                }
+                bindProgress(downloadProgress, tvProgressPercent, state.progress)
             }
             is FileState.Downloaded -> {
                 progressContainer.isGone = true
@@ -249,14 +240,7 @@ class MessagesAdapter(
         when (val state = msg.fileStates[pending.tempId] ?: FileState.Uploading(null)) {
             is FileState.Uploading -> {
                 progressContainer.isVisible = true
-                downloadProgress.isIndeterminate = state.progress == null
-                if (state.progress != null) {
-                    downloadProgress.progress = state.progress
-                    tvProgressPercent.isVisible = true
-                    tvProgressPercent.text = "${state.progress}%"
-                } else {
-                    tvProgressPercent.isGone = true
-                }
+                bindProgress(downloadProgress, tvProgressPercent, state.progress)
             }
             is FileState.Downloaded -> {
                 progressContainer.isGone = true
@@ -425,153 +409,58 @@ class MessagesAdapter(
 
     // ─── ViewHolders ──────────────────────────────────────────────────────────
 
-    inner class MineVH(view: View) : RecyclerView.ViewHolder(view) {
-        private val messageContainer: LinearLayout = view.findViewById(R.id.messageContainer)
-        private val tv: TextView = view.findViewById(R.id.textMessage)
-        private val time: TextView = view.findViewById(R.id.time)
-        private val sentImg: ImageView = view.findViewById(R.id.sentImageView)
-        private val errorImg: ImageView = view.findViewById(R.id.warningImageView)
-        private val errorText: TextView = view.findViewById(R.id.errorText)
-        private val sendingProgress: ProgressBar = view.findViewById(R.id.sendProgressBar)
-        private val attachmentContainer: LinearLayout = view.findViewById(R.id.attachmentContainer)
-        private val replyMarkupContainer: LinearLayout = view.findViewById(R.id.replyMarkupContainer)
+    abstract inner class BaseVH(view: View) : RecyclerView.ViewHolder(view) {
+        abstract fun bind(msg: MessageUI)
+    }
 
-        fun bind(msg: MessageUI) {
-            setContainerWidthExpanded(msg.hasImages())
-            bindContent(msg)
-            time.text = formatTime(msg.createdAt)
-            when {
-                msg.isSent -> showSent()
-                !msg.error.isNullOrEmpty() -> showError(msg.error)
-                else -> showSending()
-            }
-        }
 
-        private fun setContainerWidthExpanded(expanded: Boolean) {
-            val p = messageContainer.layoutParams as ConstraintLayout.LayoutParams
-            if (expanded) {
-                p.matchConstraintDefaultWidth = ConstraintLayout.LayoutParams.MATCH_CONSTRAINT_PERCENT
-                p.matchConstraintMaxWidth = 0
-            } else {
-                p.matchConstraintDefaultWidth = 0
-                p.matchConstraintMaxWidth = ConstraintLayout.LayoutParams.WRAP_CONTENT
-            }
-            messageContainer.layoutParams = p
-        }
+    /**
+     * SDK: `MessageContent.System` — chat events (member joined / left, Flow events).
+     * Shown as a centered line: no bubble, menu, reactions or status.
+     */
+    inner class SystemVH(view: View) : BaseVH(view) {
+        private val text: TextView = view.findViewById(R.id.systemText)
 
-        @SuppressLint("SetTextI18n")
-        private fun bindContent(msg: MessageUI) {
-            // Outgoing before server echo: render from pending attachment info
-            if (msg.pendingAttachment != null) {
-                val pendingText = (msg.content as? MessageContent.Text)?.text
-                    ?.takeIf { it != msg.pendingAttachment.fileName }
-                tv.isVisible = !pendingText.isNullOrBlank()
-                if (!pendingText.isNullOrBlank()) tv.text = pendingText
-                bindPendingAttachment(msg, msg.pendingAttachment, attachmentContainer)
-                replyMarkupContainer.visibility = View.GONE
-                return
-            }
-
-            attachmentContainer.removeAllViews()
-            when (val content = msg.content) {
-                is MessageContent.Text -> {
-                    tv.isVisible = true
-                    tv.text = content.text
-                    replyMarkupContainer.visibility = View.GONE
-                }
-                is MessageContent.Attachments -> {
-                    tv.isGone = true
-                    bindAttachments(msg, content.attachments, attachmentContainer)
-                    replyMarkupContainer.visibility = View.GONE
-                }
-                is MessageContent.Composite -> {
-                    tv.isVisible = !content.text.isNullOrEmpty()
-                    tv.text = content.text.orEmpty()
-                    bindAttachments(msg, content.attachments, attachmentContainer)
-                    val kb = content.keyboard
-                    if (kb != null) bindKeyboard(kb, replyMarkupContainer, msg.messageId)
-                    else replyMarkupContainer.visibility = View.GONE
-                }
-                is MessageContent.Contact -> {
-                    tv.isVisible = true
-                    tv.text = "Contact: ${content.name}"
-                    replyMarkupContainer.visibility = View.GONE
-                }
-                is MessageContent.Location -> {
-                    tv.isVisible = true
-                    tv.text = "Location: ${content.name}"
-                    replyMarkupContainer.visibility = View.GONE
-                }
-                is MessageContent.System -> {
-                    tv.isVisible = true
-                    tv.text = "System: ${content.text}"
-                    replyMarkupContainer.visibility = View.GONE
-                }
-                is MessageContent.KeyboardOnly -> {
-                    tv.isGone = true
-                    bindKeyboard(content.keyboard, replyMarkupContainer, msg.messageId)
-                }
-            }
-        }
-
-        fun updateProgress(msg: MessageUI, fileStates: Map<String, FileState>) =
-            updateProgressValues(attachmentContainer, fileStates)
-
-        private fun showSent() {
-            sentImg.isVisible = true
-            sendingProgress.isGone = true
-            errorImg.isGone = true
-            errorText.isGone = true
-            time.isVisible = true
-        }
-
-        private fun showSending() {
-            sendingProgress.isVisible = true
-            sentImg.isGone = true
-            errorImg.isGone = true
-            time.isGone = true
-        }
-
-        private fun showError(error: String?) {
-            errorImg.isVisible = true
-            errorText.isVisible = true
-            errorText.text = error.orEmpty()
-            sentImg.isGone = true
-            sendingProgress.isGone = true
-            time.isGone = true
+        override fun bind(msg: MessageUI) {
+            val system = msg.content as MessageContent.System
+            text.text = "${system.icon} ${system.text} · ${formatTime(msg.createdAt)}"
         }
     }
 
 
-    inner class TheirsVH(view: View) : RecyclerView.ViewHolder(view) {
+    /** Common part of outgoing and incoming bubbles: text, attachments, keyboard, time. */
+    abstract inner class MessageVH(view: View) : BaseVH(view) {
         private val messageContainer: LinearLayout = view.findViewById(R.id.messageContainer)
-        private val avatarCard: MaterialCardView = view.findViewById(R.id.avatarCard)
-        private val avatarText: TextView = view.findViewById(R.id.avatarText)
-        private val author: TextView = view.findViewById(R.id.author)
-        private val time: TextView = view.findViewById(R.id.time)
         private val tv: TextView = view.findViewById(R.id.textMessage)
+        protected val time: TextView = view.findViewById(R.id.time)
         private val attachmentContainer: LinearLayout = view.findViewById(R.id.attachmentContainer)
         private val replyMarkupContainer: LinearLayout = view.findViewById(R.id.replyMarkupContainer)
+        private val reactionsContainer: ChipGroup = view.findViewById(R.id.reactionsContainer)
+        private val deliveryFailuresText: TextView = view.findViewById(R.id.deliveryFailuresText)
+        private val replyQuote: View = view.findViewById(R.id.replyQuote)
+        private val quoteAuthor: TextView = view.findViewById(R.id.quoteAuthor)
+        private val quoteText: TextView = view.findViewById(R.id.quoteText)
 
-        fun bind(msg: MessageUI) {
+        override fun bind(msg: MessageUI) {
             setContainerWidthExpanded(msg.hasImages())
+            bindQuote(msg)
             bindContent(msg)
+            bindReactions(msg)
+            bindDeliveryFailures(msg)
+            time.text = if (msg.isEdited) "edited · ${formatTime(msg.createdAt)}" else formatTime(msg.createdAt)
 
-            val initials = msg.senderName
-                .split(" ")
-                .take(2)
-                .mapNotNull { it.firstOrNull()?.uppercase() }
-                .joinToString("")
-
-            avatarText.text = initials
-            author.text = msg.senderName
-            time.text = formatTime(msg.createdAt)
-
-            val bg = colorFromId(msg.senderName)
-            avatarCard.setCardBackgroundColor(bg)
-            avatarText.setTextColor(if (isColorDark(bg)) Color.WHITE else Color.BLACK)
+            // Long press opens the message menu. Only server messages that are not deleted have one.
+            val hasMenu = msg.isSent && !msg.isDeleted
+            messageContainer.setOnLongClickListener {
+                if (hasMenu) onMessageLongClick(msg)
+                hasMenu
+            }
         }
 
+        fun updateProgress(fileStates: Map<String, FileState>) =
+            updateProgressValues(attachmentContainer, fileStates)
+
+        /** Images need the wide (percent) bubble, everything else wraps its content. */
         private fun setContainerWidthExpanded(expanded: Boolean) {
             val p = messageContainer.layoutParams as ConstraintLayout.LayoutParams
             if (expanded) {
@@ -584,51 +473,153 @@ class MessagesAdapter(
             messageContainer.layoutParams = p
         }
 
-        fun updateProgress(msg: MessageUI, fileStates: Map<String, FileState>) =
-            updateProgressValues(attachmentContainer, fileStates)
-
-        @SuppressLint("SetTextI18n")
         private fun bindContent(msg: MessageUI) {
+            replyMarkupContainer.isGone = true
             attachmentContainer.removeAllViews()
+
+            // Tap on the bubble: only location and contact cards have an action
+            messageContainer.setOnClickListener(null)
+            messageContainer.isClickable = false
+
+            // Deleted messages stay in the history: "Message deleted by <name>"
+            if (msg.isDeleted) {
+                val by = msg.deletion?.let { " by ${it.deletedBy.contact.name}" }.orEmpty()
+                showText("🚫 Message deleted$by")
+                return
+            }
+
+            // Outgoing file before the server echo: render from local file info
+            if (msg.pendingAttachment != null) {
+                val text = (msg.content as? MessageContent.Text)?.text
+                    ?.takeIf { it != msg.pendingAttachment.fileName }
+                showText(text)
+                bindPendingAttachment(msg, msg.pendingAttachment, attachmentContainer)
+                return
+            }
+
             when (val content = msg.content) {
-                is MessageContent.Text -> {
-                    tv.isVisible = true
-                    tv.text = content.text
-                    replyMarkupContainer.visibility = View.GONE
-                }
+                is MessageContent.Text -> showText(content.text)
                 is MessageContent.Attachments -> {
-                    tv.isGone = true
+                    showText(null)
                     bindAttachments(msg, content.attachments, attachmentContainer)
-                    replyMarkupContainer.visibility = View.GONE
                 }
                 is MessageContent.Composite -> {
-                    tv.isVisible = !content.text.isNullOrEmpty()
-                    tv.text = content.text.orEmpty()
+                    showText(content.text)
                     bindAttachments(msg, content.attachments, attachmentContainer)
-                    val kb = content.keyboard
-                    if (kb != null) bindKeyboard(kb, replyMarkupContainer, msg.messageId)
-                    else replyMarkupContainer.visibility = View.GONE
+                    content.keyboard?.let { bindKeyboard(it, replyMarkupContainer, msg.messageId) }
                 }
+                // SDK: contact card — name, phone and email. Tap offers to call / write.
                 is MessageContent.Contact -> {
-                    tv.isVisible = true
-                    tv.text = "Contact: ${content.name}"
-                    replyMarkupContainer.visibility = View.GONE
+                    showText(listOfNotNull("👤 ${content.name}", content.phone, content.email).joinToString("\n"))
+                    messageContainer.setOnClickListener { onContactClick(content) }
                 }
+                // SDK: location — name, address and coordinates. Tap opens a maps app.
                 is MessageContent.Location -> {
-                    tv.isVisible = true
-                    tv.text = "Location: ${content.name}"
-                    replyMarkupContainer.visibility = View.GONE
+                    showText(listOf("📍 ${content.name}", content.address).filter { it.isNotBlank() }.joinToString("\n"))
+                    messageContainer.setOnClickListener { onLocationClick(content) }
                 }
-                is MessageContent.System -> {
-                    tv.isVisible = true
-                    tv.text = "System: ${content.text}"
-                    replyMarkupContainer.visibility = View.GONE
-                }
+                // Not a bubble (see SystemVH); reached only for a deleted system message
+                is MessageContent.System -> showText(content.text)
                 is MessageContent.KeyboardOnly -> {
-                    tv.isGone = true
+                    showText(null)
                     bindKeyboard(content.keyboard, replyMarkupContainer, msg.messageId)
                 }
             }
+        }
+
+        /** "Not delivered to <member>: <code> <message>" for each member the message did not reach. */
+        private fun bindDeliveryFailures(msg: MessageUI) {
+            val failures = if (msg.isDeleted) emptyList() else msg.deliveryFailures
+            deliveryFailuresText.isVisible = failures.isNotEmpty()
+            deliveryFailuresText.text = failures.joinToString("\n") {
+                "⚠️ Not delivered to ${it.member.contact.name}: ${it.error.code} ${it.error.message.orEmpty()}"
+            }
+        }
+
+        /** Quote of the original message: author + short content, or "Message deleted". */
+        private fun bindQuote(msg: MessageUI) {
+            val reply = msg.reply
+            replyQuote.isVisible = reply != null && !msg.isDeleted
+            if (reply == null) return
+
+            quoteAuthor.text = reply.authorName
+            quoteText.text = if (reply.isDeleted) "Message deleted" else reply.text
+            quoteText.setTypeface(null, if (reply.isDeleted) Typeface.ITALIC else Typeface.NORMAL)
+        }
+
+        /** "👍 2" chip per emoji. Mine has an outline; tap toggles it. */
+        private fun bindReactions(msg: MessageUI) {
+            reactionsContainer.removeAllViews()
+            reactionsContainer.isVisible = msg.reactions.isNotEmpty() && !msg.isDeleted
+            if (msg.isDeleted) return
+
+            val density = reactionsContainer.resources.displayMetrics.density
+            msg.reactions.forEach { reaction ->
+                val chip = Chip(reactionsContainer.context).apply {
+                    text = "${reaction.emoji} ${reaction.count}"
+                    setEnsureMinTouchTargetSize(false)
+                    chipMinHeight = 28 * density
+                    chipStrokeWidth = if (reaction.reactedByMe) 2 * density else 0f
+                    chipStrokeColor = ColorStateList.valueOf(
+                        MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary)
+                    )
+                    setOnClickListener { onReactionClick(msg, reaction.emoji) }
+                }
+                reactionsContainer.addView(chip)
+            }
+        }
+
+        private fun showText(text: String?) {
+            tv.isVisible = !text.isNullOrEmpty()
+            tv.text = text.orEmpty()
+        }
+    }
+
+
+    /** Outgoing: shows sending / error, then ✓ delivered and ✓✓ read. */
+    inner class MineVH(view: View) : MessageVH(view) {
+        private val deliveryStatus: TextView = view.findViewById(R.id.deliveryStatus)
+        private val errorImg: ImageView = view.findViewById(R.id.warningImageView)
+        private val errorText: TextView = view.findViewById(R.id.errorText)
+        private val sendingProgress: ProgressBar = view.findViewById(R.id.sendProgressBar)
+
+        override fun bind(msg: MessageUI) {
+            super.bind(msg)
+            val failed = !msg.isSent && !msg.error.isNullOrEmpty()
+            val sending = !msg.isSent && !failed
+
+            deliveryStatus.isVisible = msg.isSent && !msg.isDeleted
+            deliveryStatus.text = when (msg.deliveryStatus) {
+                DeliveryStatus.DELIVERED -> "✓"
+                DeliveryStatus.READ -> "✓✓"
+                DeliveryStatus.SENT, null -> ""
+            }
+            deliveryStatus.setTextColor(
+                if (msg.deliveryStatus == DeliveryStatus.READ) READ_COLOR else Color.GRAY
+            )
+            time.isVisible = msg.isSent
+            sendingProgress.isVisible = sending
+            errorImg.isVisible = failed
+            errorText.isVisible = failed
+            errorText.text = msg.error.orEmpty()
+        }
+    }
+
+
+    /** Incoming: shows sender avatar and name. */
+    inner class TheirsVH(view: View) : MessageVH(view) {
+        private val avatarCard: MaterialCardView = view.findViewById(R.id.avatarCard)
+        private val avatarText: TextView = view.findViewById(R.id.avatarText)
+        private val author: TextView = view.findViewById(R.id.author)
+
+        override fun bind(msg: MessageUI) {
+            super.bind(msg)
+            author.text = msg.senderName
+            avatarText.text = initials(msg.senderName)
+
+            val bg = colorFromId(msg.senderName)
+            avatarCard.setCardBackgroundColor(bg)
+            avatarText.setTextColor(if (isColorDark(bg)) Color.WHITE else Color.BLACK)
         }
     }
 
@@ -653,31 +644,19 @@ class MessagesAdapter(
             val tag = view.tag as? AttachmentTag ?: return
             val state = fileStates[tag.fileId] ?: return
 
+            val progress = state.progress ?: return
+
             // Image cell: has R.id.tvProgress inside a progressOverlay
             val tvProgress = view.findViewById<TextView>(R.id.tvProgress)
             if (tvProgress != null) {
-                when (state) {
-                    is FileState.Downloading -> tvProgress.text = if (state.progress != null) "${state.progress}%" else "…"
-                    is FileState.Uploading -> tvProgress.text = if (state.progress != null) "${state.progress}%" else "…"
-                    else -> {}
-                }
+                tvProgress.text = progressText(progress)
                 return
             }
 
             // File row: has R.id.downloadProgress
-            val dp = view.findViewById<ProgressBar>(R.id.downloadProgress) ?: return
-            val tv = view.findViewById<TextView>(R.id.tvProgressPercent) ?: return
-            when (state) {
-                is FileState.Downloading -> {
-                    dp.isIndeterminate = state.progress == null
-                    if (state.progress != null) { dp.progress = state.progress; tv.isVisible = true; tv.text = "${state.progress}%" }
-                }
-                is FileState.Uploading -> {
-                    dp.isIndeterminate = state.progress == null
-                    if (state.progress != null) { dp.progress = state.progress; tv.isVisible = true; tv.text = "${state.progress}%" }
-                }
-                else -> {}
-            }
+            val bar = view.findViewById<ProgressBar>(R.id.downloadProgress) ?: return
+            val percent = view.findViewById<TextView>(R.id.tvProgressPercent) ?: return
+            bindProgress(bar, percent, progress)
         }
 
         for (i in 0 until container.childCount) {
@@ -690,6 +669,36 @@ class MessagesAdapter(
             }
         }
     }
+
+    /** Upload / download progress in percent, or null if not in progress or the size is unknown. */
+    private val FileState.progress: Int?
+        get() = when (this) {
+            is FileState.Downloading -> progress
+            is FileState.Uploading -> progress
+            else -> null
+        }
+
+    private fun progressText(progress: Int?) = if (progress != null) "$progress%" else "…"
+
+    private fun bindProgress(bar: ProgressBar, percent: TextView, progress: Int?) {
+        bar.isIndeterminate = progress == null
+        percent.isVisible = progress != null
+        if (progress != null) {
+            bar.progress = progress
+            percent.text = progressText(progress)
+        }
+    }
+
+    /**
+     * Icon for built-in system event types. The list is not exhaustive:
+     * the backend may send custom Flow events — they get a generic icon and their `text`.
+     */
+    private val MessageContent.System.icon: String
+        get() = when (type) {
+            "member_added" -> "👤➕"
+            "member_removed" -> "👤➖"
+            else -> "ℹ️"
+        }
 
     private data class AttachmentTag(val fileId: String, val mimeType: String, val fileSize: Long)
 

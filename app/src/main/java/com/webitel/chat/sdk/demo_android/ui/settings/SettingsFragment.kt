@@ -5,20 +5,21 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
-import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.webitel.chat.sdk.demo_android.BuildConfig
 import com.webitel.chat.sdk.demo_android.databinding.FragmentSettingsBinding
 import com.webitel.chat.sdk.demo_android.repo.AuthInfo
+import com.webitel.chat.sdk.demo_android.ui.common.collectToasts
 import kotlinx.coroutines.launch
 
 
 class SettingsFragment : Fragment() {
     private var _binding: FragmentSettingsBinding? = null
-    lateinit var settingsViewModel: SettingsViewModel
+    private val settingsViewModel: SettingsViewModel by viewModels()
 
     private val binding get() = _binding!!
 
@@ -28,9 +29,6 @@ class SettingsFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        settingsViewModel =
-            ViewModelProvider(this).get(SettingsViewModel::class.java)
-
         _binding = FragmentSettingsBinding.inflate(inflater, container, false)
         val root: View = binding.root
 
@@ -41,7 +39,8 @@ class SettingsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.versionText.text = com.webitel.chat.sdk.BuildConfig.VERSION_NAME
+        binding.versionText.text =
+            "Demo ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · SDK ${BuildConfig.SDK_VERSION}"
 
         binding.connectButton.setOnClickListener {
             val host = binding.endpointInput.validateNotBlank("Endpoint required")
@@ -59,7 +58,7 @@ class SettingsFragment : Fragment() {
         }
 
         observeAuthInfo()
-        observeEvents()
+        collectToasts(settingsViewModel.events)
         observeProgress()
     }
 
@@ -84,17 +83,6 @@ class SettingsFragment : Fragment() {
                 binding.userIdInput.setText(auth.userId)
                 binding.issInput.setText(auth.issuer)
                 binding.nameInput.setText(auth.userName)
-            }
-        }
-    }
-
-    private fun observeEvents() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                settingsViewModel.events.collect { event ->
-                    Toast.makeText(context, event, Toast.LENGTH_LONG)
-                        .show()
-                }
             }
         }
     }

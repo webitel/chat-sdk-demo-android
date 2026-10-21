@@ -1,16 +1,19 @@
 package com.webitel.chat.sdk.demo_android.ui.dialogs
 
 import android.graphics.Color
+import android.graphics.Typeface
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.card.MaterialCardView
 import com.webitel.chat.sdk.demo_android.R
 import com.webitel.chat.sdk.demo_android.ui.common.colorFromId
+import com.webitel.chat.sdk.demo_android.ui.common.initials
 import com.webitel.chat.sdk.demo_android.ui.common.isColorDark
 
 
@@ -48,18 +51,13 @@ class DialogsAdapter(
         private val avatarText: TextView = view.findViewById(R.id.avatarText)
         private val title: TextView = view.findViewById(R.id.titleText)
         private val topMessage: TextView = view.findViewById(R.id.topMessageText)
+        private val unreadBadge: TextView = view.findViewById(R.id.unreadBadge)
 
         fun bind(dialog: DialogUI) {
             title.text = dialog.subject
             updateMessageOnly(dialog)
 
-            val initials = dialog.subject
-                .split(" ")
-                .take(2)
-                .mapNotNull { it.firstOrNull()?.uppercase() }
-                .joinToString("")
-
-            avatarText.text = initials
+            avatarText.text = initials(dialog.subject)
 
             val bg = colorFromId(dialog.id)
             avatarCard.setCardBackgroundColor(bg)
@@ -71,7 +69,13 @@ class DialogsAdapter(
         }
 
         fun updateMessageOnly(dialog: DialogUI) {
-            topMessage.text = dialog.lastMessageText
+            // Unread messages count, hidden when 0
+            unreadBadge.isVisible = dialog.unreadCount > 0
+            unreadBadge.text = dialog.unreadCount.toString()
+
+            val typing = dialog.typingName
+            topMessage.text = if (typing != null) "$typing is typing…" else dialog.lastMessageText
+            topMessage.setTypeface(null, if (typing != null) Typeface.ITALIC else Typeface.NORMAL)
         }
     }
 
@@ -81,10 +85,15 @@ class DialogsAdapter(
 
         override fun areContentsTheSame(old: DialogUI, new: DialogUI) =
             old.lastMessageText == new.lastMessageText &&
-                    old.lastMessageAt == new.lastMessageAt
+                    old.lastMessageAt == new.lastMessageAt &&
+                    old.typingName == new.typingName &&
+                    old.unreadCount == new.unreadCount
 
         override fun getChangePayload(oldItem: DialogUI, newItem: DialogUI): Any? {
-            if (oldItem.lastMessageText != newItem.lastMessageText) {
+            if (oldItem.lastMessageText != newItem.lastMessageText ||
+                oldItem.typingName != newItem.typingName ||
+                oldItem.unreadCount != newItem.unreadCount
+            ) {
                 return "PAYLOAD_MESSAGE"
             }
             return super.getChangePayload(oldItem, newItem)

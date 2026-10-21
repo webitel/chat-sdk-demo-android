@@ -33,12 +33,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var navController: NavController
     private lateinit var navView: BottomNavigationView
+    private val authRepository by lazy { AuthRepository(this) }
 
     private lateinit var connectivityManager: ConnectivityManager
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
 
         override fun onAvailable(network: Network) {
-            openConnect()
+            ChatRepository.shared.connect()
         }
 
         override fun onLost(network: Network) {}
@@ -77,9 +78,9 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 ChatRepository.shared.connectionState.collect {
-                    updateConnectionLouder(it)
+                    updateConnectionLoader(it)
                     setConnectStateUI(it)
-                    setTabsEnabled(AuthRepository(this@MainActivity).getAuthInfo() != null)
+                    setTabsEnabled(authRepository.getAuthInfo() != null)
                 }
             }
         }
@@ -87,7 +88,7 @@ class MainActivity : AppCompatActivity() {
         setupActionBarWithNavController(navController, appBarConfiguration)
         navView.setupWithNavController(navController)
 
-        val hasAuth = AuthRepository(this).getAuthInfo() != null
+        val hasAuth = authRepository.getAuthInfo() != null
         setTabsEnabled(hasAuth)
         if (!hasAuth) {
             navView.selectedItemId = R.id.navigation_settings
@@ -106,15 +107,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        openConnect()
+        ChatRepository.shared.connect()
     }
 
 
     override fun onPause() {
         super.onPause()
-        try {
-            ChatRepository.shared.closeConnect()
-        }catch (e: Exception) {}
+        ChatRepository.shared.disconnect()
     }
 
     override fun onDestroy() {
@@ -128,37 +127,22 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun openConnect() {
-        try {
-            ChatRepository.shared.openConnect()
-        }catch (e: Exception) {}
-    }
-
-
+    /** Connection state as the toolbar subtitle — small, under the screen title. */
     private fun setConnectStateUI(state: ConnectionState) {
-        when(state) {
-            is ConnectionState.Connecting -> {
-                binding.connectionState.text = "Connecting..."
-            }
-            ConnectionState.Connected -> {
-                binding.connectionState.text = "Connected"
-            }
-            ConnectionState.Disconnected -> {
-                binding.connectionState.text = "Disconnected ⚪"
-            }
+        supportActionBar?.subtitle = when (state) {
+            is ConnectionState.Connecting -> "Connecting…"
+            ConnectionState.Connected -> "Connected"
+            ConnectionState.Disconnected -> "Disconnected"
             is ConnectionState.Failed -> {
-                binding.connectionState.text = "Failed ${state.error.code} \uD83D\uDD34"
-                Toast.makeText(this, state.error.message, Toast.LENGTH_LONG)
-                    .show()
+                Toast.makeText(this, state.error.message, Toast.LENGTH_LONG).show()
+                "Failed ${state.error.code}"
             }
-            is ConnectionState.Reconnecting -> {
-                binding.connectionState.text = "Reconnecting..."
-            }
+            is ConnectionState.Reconnecting -> "Reconnecting…"
         }
     }
 
 
-    private fun updateConnectionLouder(state: ConnectionState) {
+    private fun updateConnectionLoader(state: ConnectionState) {
         when(state) {
             is ConnectionState.Reconnecting,
                 ConnectionState.Connecting -> {
@@ -170,7 +154,6 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-
     private fun setTabsEnabled(enabled: Boolean) {
         navView.menu.findItem(R.id.navigation_dialogs).isEnabled = enabled
         navView.menu.findItem(R.id.navigation_contacts).isEnabled = enabled
@@ -178,14 +161,10 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun setupChatClient() {
-        try {
-            val auth = AuthRepository(this@MainActivity)
-                .getAuthInfo()
-
-            if (auth != null) {
-                ChatRepository.shared.setupChatClient(application, auth.host, auth.token,
-                    ContactIdentity(auth.userId, auth.issuer, auth.userName))
-            }
-        } catch (e: Exception) {}
+        val auth = authRepository.getAuthInfo() ?: return
+        ChatRepository.shared.setupChatClient(
+            application, auth.host, auth.token,
+            ContactIdentity(auth.userId, auth.issuer, auth.userName)
+        )
     }
 }

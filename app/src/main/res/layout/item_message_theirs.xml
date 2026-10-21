@@ -15,7 +15,7 @@
         app:cardElevation="0dp"
         app:strokeWidth="0dp"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintBottom_toBottomOf="@+id/messageContainer">
 
         <TextView
             android:id="@+id/avatarText"
@@ -49,11 +49,56 @@
         android:background="@drawable/background_theirs_message"
         android:clipToOutline="true"
         android:orientation="vertical"
-        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toEndOf="@+id/avatarCard"
         app:layout_constraintTop_toBottomOf="@+id/author"
         app:layout_constraintWidth_max="wrap"
         app:layout_constraintWidth_percent="0.80">
+
+        <!-- Reply quote: author + short content of the original message -->
+        <LinearLayout
+            android:id="@+id/replyQuote"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_reply_quote"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <View
+                android:layout_width="3dp"
+                android:layout_height="match_parent"
+                android:background="?attr/colorPrimary" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="8dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:id="@+id/quoteAuthor"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:textColor="?attr/colorPrimary"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/quoteText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/text_color"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </LinearLayout>
 
         <TextView
             android:id="@+id/textMessage"
@@ -100,5 +145,31 @@
             app:layout_constraintTop_toTopOf="parent" />
 
     </LinearLayout>
+
+    <!-- Reactions under the bubble: "👍 2" chips -->
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/reactionsContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:visibility="gone"
+        app:chipSpacingHorizontal="4dp"
+        app:chipSpacingVertical="0dp"
+        app:layout_constraintStart_toStartOf="@+id/messageContainer"
+        app:layout_constraintTop_toBottomOf="@+id/messageContainer" />
+
+    <!-- "⚠️ Not delivered to X: <code> <message>" per member -->
+    <TextView
+        android:id="@+id/deliveryFailuresText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="#E53E1A"
+        android:textSize="13sp"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="@+id/messageContainer"
+        app:layout_constraintTop_toBottomOf="@+id/reactionsContainer"
+        app:layout_constraintWidth_max="wrap"
+        app:layout_constraintWidth_percent="0.80" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

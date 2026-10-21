@@ -2,6 +2,13 @@ package com.webitel.chat.sdk.demo_android.ui.common
 
 import android.annotation.SuppressLint
 import android.graphics.Color
+import android.widget.Toast
+import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import kotlin.math.absoluteValue
@@ -23,14 +30,29 @@ fun isColorDark(color: Int): Boolean {
 }
 
 
-@SuppressLint("SimpleDateFormat")
-fun formatTime(timeStamp: Long): String {
-    val sdf = SimpleDateFormat("HH:mm")
-    return try {
+/** "John Doe" → "JD" */
+fun initials(name: String): String =
+    name.split(" ")
+        .take(2)
+        .mapNotNull { it.firstOrNull()?.uppercase() }
+        .joinToString("")
 
-        val netDate = Date(timeStamp)
-        sdf.format(netDate)
-    } catch (e: Exception) {
-        e.toString()
+
+@SuppressLint("SimpleDateFormat")
+fun formatTime(timeStamp: Long): String =
+    SimpleDateFormat("HH:mm").format(Date(timeStamp))
+
+
+@SuppressLint("SimpleDateFormat")
+fun formatDateTime(timeStamp: Long): String =
+    SimpleDateFormat("dd.MM HH:mm").format(Date(timeStamp))
+
+
+/** Shows every message from [messages] as a Toast while the fragment is visible. */
+fun Fragment.collectToasts(messages: Flow<String>) {
+    viewLifecycleOwner.lifecycleScope.launch {
+        viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            messages.collect { Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show() }
+        }
     }
 }

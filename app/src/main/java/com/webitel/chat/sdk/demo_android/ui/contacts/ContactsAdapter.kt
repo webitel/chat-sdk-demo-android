@@ -12,6 +12,7 @@ import com.google.android.material.card.MaterialCardView
 import com.webitel.chat.sdk.Contact
 import com.webitel.chat.sdk.demo_android.R
 import com.webitel.chat.sdk.demo_android.ui.common.colorFromId
+import com.webitel.chat.sdk.demo_android.ui.common.initials
 import com.webitel.chat.sdk.demo_android.ui.common.isColorDark
 
 
@@ -39,13 +40,7 @@ class ContactsAdapter(
         fun bind(contact: Contact) {
             title.text = contact.name
 
-            val initials = contact.name
-                .split(" ")
-                .take(2)
-                .mapNotNull { it.firstOrNull()?.uppercase() }
-                .joinToString("")
-
-            avatarText.text = initials
+            avatarText.text = initials(contact.name)
 
             val bg = colorFromId(contact.id.sub)
             avatarCard.setCardBackgroundColor(bg)
@@ -60,6 +55,6 @@ class ContactsAdapter(
     class Diff : DiffUtil.ItemCallback<Contact>() {
         override fun areItemsTheSame(old: Contact, new: Contact) = old.id == new.id
         override fun areContentsTheSame(old: Contact, new: Contact) =
-            old.id == new.id
+            old.id == new.id && old.name == new.name
     }
 }
